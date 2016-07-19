@@ -5,7 +5,8 @@
     "require": {
         "php": ">=5.3.3",
         "symfony/yaml": "~2.6.3",
-        "tcdent/php-restclient": ">=0.1.4"
+        "tcdent/php-restclient": ">=0.1.4",
+        "keboola/json-parser": "~1.0.0"
     },
     "require-dev": {
         "squizlabs/php_codesniffer": "2.*"
