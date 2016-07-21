@@ -23,7 +23,6 @@ class Xero
 	);
 
 	private $mandatoryConfigColumns = array(
-		'bucket',
 		'consumer_key', 
 		'#consumer_secret', 
 		'#private_key',
@@ -116,7 +115,7 @@ class Xero
 
 		foreach ($result as $file)
 		{
-			copy($file->getPathName(), $this->destination.$this->config['bucket'].'.'.substr($file->getFileName(), strpos($file->getFileName(), '-')+1));
+			copy($file->getPathName(), $this->destination.substr($file->getFileName(), strpos($file->getFileName(), '-')+1));
 		}
 	}
 
