@@ -26,10 +26,10 @@ class Xero
 		'bucket',
 		'consumer_key', 
 		'#consumer_secret', 
-		'private_key',
+		'#private_key',
 		'public_key',
 		'parameters',
-		'report_name',
+		'endpoint',
 	);
 
 	private $destination;
@@ -51,13 +51,6 @@ class Xero
 			$this->config[$c] = $config[$c];
 		}
 
-		$this->signatures['consumer_key'] = $this->config['consumer_key'];
-		$this->signatures['access_token'] = $this->config['consumer_key'];
-		$this->signatures['shared_secret'] = $this->config['#consumer_secret'];
-		$this->signatures['access_token_secret'] = $this->config['#consumer_secret'];
-		$this->signatures['rsa_private_key'] = "/data/in/files/".$this->config['private_key'];
-		$this->signatures['rsa_public_key'] = "/data/in/files/".$this->config['public_key'];
-
 		if (!file_exists(dirname(__FILE__)."/certs/"))
 		{
 			mkdir(dirname(__FILE__)."/certs/");
@@ -74,6 +67,15 @@ class Xero
 
 			file_put_contents(dirname(__FILE__)."/certs/ca-bundle.crt", $cert);
 		}
+
+		$this->prepareCertificates();
+
+		$this->signatures['consumer_key'] = $this->config['consumer_key'];
+		$this->signatures['access_token'] = $this->config['consumer_key'];
+		$this->signatures['shared_secret'] = $this->config['#consumer_secret'];
+		$this->signatures['access_token_secret'] = $this->config['#consumer_secret'];
+		$this->signatures['rsa_private_key'] = dirname(__FILE__)."/certs/privatekey";
+		$this->signatures['rsa_public_key'] = dirname(__FILE__)."/certs/publickey";
 
 		$this->xero = new XeroOAuth($this->signatures);
 
@@ -92,26 +94,38 @@ class Xero
 
 	public function run()
 	{
-		$url = $this->xero->url('Reports/'.$this->config['report_name']);
+		$url = $this->xero->url($this->config['endpoint']);
 
 		$response = $this->xero->request('GET', $url, $this->config['parameters'], '', 'json');
+
+		if ($response['code'] != '200')
+		{
+			throw new Exception("Request to the API failed: ".$response['code'].": ".$response['response']);
+		}
 
 		$this->write($response['response']);
 	}
 
 	private function write($result)
 	{
-		print_r($result);
 		$json = json_decode($result);
-		print_r($json);
 
 		$parser = Parser::create(new \Monolog\Logger('json-parser'));
-		$parser->process($json->Reports, $this->config['report_name']);
+		$parser->process(array($json), str_replace('/', '_', $this->config['endpoint']));
 		$result = $parser->getCsvFiles();
 
 		foreach ($result as $file)
 		{
 			copy($file->getPathName(), $this->destination.$this->config['bucket'].'.'.substr($file->getFileName(), strpos($file->getFileName(), '-')+1));
 		}
+	}
+
+	private function prepareCertificates()
+	{
+		foreach (array('#private_key' => 'privatekey', 'public_key' => 'publickey') as $configName => $fileName)
+		{
+			$cert = str_replace("\\n", "\n", $this->config[$configName]);
+			file_put_contents(dirname(__FILE__)."/certs/".$fileName, $cert);
+		}	
 	}
 }

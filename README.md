@@ -8,7 +8,7 @@ Set up:
 
 2. Register new Private Application: https://app.xero.com/Application/Add
 
-3. Put privatekey.pem, publickey.cer, consumer key and consumer secret to the KBC File Storage and name it with the tag.
+3. Put privatekey.pem, publickey.cer, consumer key and consumer secret to the configuration. Before including cerficates, replace all newlines with "\n" string.
 
 4. Create configuration:
 
@@ -19,20 +19,20 @@ Set up:
   "consumer_key": "<your_consumer_key>",
   "#consumer_secret": "<your_consumer_secret>",
 
-  "private_key": "<tag_to_private_key>",
-  "public_key": "<tag_to_public_key>",
+  "#private_key": "<private_key>",
+  "public_key": "<public_key>",
 
   "parameters": {
   	"fromDate": "2016-01-01",
   	"toDate": "today"
   },
 
-  "report_name": "ProfitAndLoss"
+  "endpoint": "ProfitAndLoss"
 }
 ```
 
 * bucket - destination bucket in KBC Storage
 * consumer_key and consumer_secret - visible after the application registration
-* private_key and public_key - name of a tag from KBC File Storage that identifies the certificates
+* private_key and public_key - certificates
 * parameters - parameters passed with the call to API to get the report
 * report_name - name of the report to download
