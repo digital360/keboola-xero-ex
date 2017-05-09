@@ -109,7 +109,9 @@ class Xero
 	{
 		$json = json_decode($result);
 
-		$parser = Parser::create(new \Monolog\Logger('json-parser'));
+		$log = new \Monolog\Logger('json-parser');
+		$log->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
+		$parser = Parser::create($log);
 		$parser->process(array($json), str_replace('/', '_', $this->config['endpoint']));
 		$result = $parser->getCsvFiles();
 
