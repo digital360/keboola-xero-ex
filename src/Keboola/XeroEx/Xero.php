@@ -97,8 +97,13 @@ class Xero
 
 		$response = $this->xero->request('GET', $url, $this->config['parameters'], '', 'json');
 
-		if ($response['code'] != '200')
+		if (empty($response['code']) || $response['code'] != '200')
 		{
+			if (empty($response['code']))
+			{
+				$response['code'] = 'N/A';
+				$response['response'] = 'N/A';
+			}
 			throw new Exception("Request to the API failed: ".$response['code'].": ".$response['response']);
 		}
 
