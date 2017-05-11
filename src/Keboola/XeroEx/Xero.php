@@ -104,7 +104,8 @@ class Xero
 				$response['code'] = 'N/A';
 				$response['response'] = 'N/A';
 			}
-			throw new Exception("Request to the API failed: ".$response['code'].": ".$response['response']);
+			trigger_error("Request to the API failed: ".$response['code'].": ".$response['response'], E_USER_ERROR);
+
 		}
 
 		$this->write($response['response']);
