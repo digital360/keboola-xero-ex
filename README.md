@@ -27,7 +27,10 @@ Set up:
   	"toDate": "today"
   },
 
-  "endpoint": "ProfitAndLoss"
+  "endpoint": [
+    "ProfitAndLoss",
+    "Contacts"
+  ]
 }
 ```
 
@@ -35,4 +38,4 @@ Set up:
 * consumer_key and consumer_secret - visible after the application registration
 * private_key and public_key - certificates
 * parameters - parameters passed with the call to API to get the report
-* report_name - name of the report to download
+* endpoint - name of the endpoints to download - might be a string or an array

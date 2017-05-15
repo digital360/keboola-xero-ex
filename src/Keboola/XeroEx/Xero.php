@@ -93,32 +93,42 @@ class Xero
 
 	public function run()
 	{
-		$url = $this->xero->url($this->config['endpoint']);
+		$endpoints = $this->config['endpoint'];
 
-		$response = $this->xero->request('GET', $url, $this->config['parameters'], '', 'json');
-
-		if (empty($response['code']) || $response['code'] != '200')
+		if (is_string($this->config['endpoint']))
 		{
-			if (empty($response['code']))
-			{
-				$response['code'] = 'N/A';
-				$response['response'] = 'N/A';
-			}
-			trigger_error("Request to the API failed: ".$response['code'].": ".$response['response'], E_USER_ERROR);
-
+			$endpoints = array($this->config['endpoint']);
 		}
 
-		$this->write($response['response']);
+		foreach ($endpoints as $endpoint)
+		{
+			$url = $this->xero->url($endpoint);
+
+			$response = $this->xero->request('GET', $url, $this->config['parameters'], '', 'json');
+
+			if (empty($response['code']) || $response['code'] != '200')
+			{
+				if (empty($response['code']))
+				{
+					$response['code'] = 'N/A';
+					$response['response'] = 'N/A';
+				}
+				trigger_error("Request to the API failed: ".$response['code'].": ".$response['response'], E_USER_ERROR);
+
+			}
+
+			$this->write($response['response'], $endpoint);
+		}
 	}
 
-	private function write($result)
+	private function write($result, $endpoint)
 	{
 		$json = json_decode($result);
 
 		$log = new \Monolog\Logger('json-parser');
 		$log->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
 		$parser = Parser::create($log);
-		$parser->process(array($json), str_replace('/', '_', $this->config['endpoint']));
+		$parser->process(array($json), str_replace('/', '_', $endpoint));
 		$result = $parser->getCsvFiles();
 
 		foreach ($result as $file)
