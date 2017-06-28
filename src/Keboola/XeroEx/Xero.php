@@ -35,6 +35,8 @@ class Xero
 
 	private $config;
 
+	private $debug = false;
+
 	public function __construct($config, $destination)
 	{
 		date_default_timezone_set('UTC');
@@ -48,6 +50,11 @@ class Xero
 			}
 
 			$this->config[$c] = $config[$c];
+		}
+
+		if (!empty($config["debug"]))
+		{
+			$this->debug = true;
 		}
 
 		if (!file_exists(dirname(__FILE__)."/certs/"))
@@ -102,33 +109,115 @@ class Xero
 
 		foreach ($endpoints as $endpoint)
 		{
-			$url = $this->xero->url($endpoint);
+			$parameters = $this->config['parameters'];
 
-			$response = $this->xero->request('GET', $url, $this->config['parameters'], '', 'json');
-
-			if (empty($response['code']) || $response['code'] != '200')
+			if (is_array($endpoint))
 			{
-				if (empty($response['code']))
-				{
-					$response['code'] = 'N/A';
-					$response['response'] = 'N/A';
-				}
-				fwrite(STDERR, "Request to the API failed: ".$response['code'].": ".$response['response']);
-				exit(1);
+				$parameters = array_merge($parameters, array_values($endpoint)[0][0]);
+				$endpoint = array_keys($endpoint)[0];
 			}
 
-			$this->write($response['response'], $endpoint);
+			$response = $this->makeRequest($endpoint, $parameters);
+			
+
+			// Page pagination
+			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders')))
+			{
+				$records = $response->$endpoint;
+				$page = 2;
+				
+				while (count($response->$endpoint) > 0 && $page <= 20)
+				{
+					if ($this->debug)
+					{
+						echo "\n";
+						print_r(count($response->$endpoint));
+					}
+
+					$currentParameters = $parameters;
+					$currentParameters['page'] = $page;
+					$response = $this->makeRequest($endpoint, $currentParameters);
+
+					$page += 1;
+					$records = array_merge($records, $response->$endpoint);
+				}
+
+				$response = $records;
+			}
+
+			// Offset paignation
+			if (in_array($endpoint, array('Journals')))
+			{
+				$offsetNames = array(
+					'Journals' => 'JournalNumber'
+				);
+				$records = $response->$endpoint;
+
+				$counter = 1;
+				
+				while (count($response->$endpoint) > 0 && $counter <= 20)
+				{
+					if ($this->debug)
+					{
+						print_r(count($response->$endpoint));
+					}
+
+					$currentParameters = $parameters;
+					$currentParameters['offset'] = $records[count($records)-1]->$offsetNames[$endpoint];
+					$response = $this->makeRequest($endpoint, $currentParameters);
+
+					$counter += 1;
+					$records = array_merge($records, $response->$endpoint);
+				}
+
+				$response = $records;
+			}			
+
+			$this->write($response, $endpoint);
 		}
 	}
 
-	private function write($result, $endpoint)
+	private function makeRequest($endpoint, $parameters)
 	{
-		$json = json_decode($result);
+		$url = $this->xero->url($endpoint);
 
+		$response = $this->xero->request('GET', $url, $parameters, '', 'json');
+
+		
+		if ($this->debug)
+		{
+			echo "\n";
+			print_r($endpoint);
+			echo "\n";
+			print_r($parameters);
+		}
+
+		if (empty($response['code']) || $response['code'] != '200')
+		{
+			if (empty($response['code']))
+			{
+				$response['code'] = 'N/A';
+				$response['response'] = 'N/A';
+			}
+			fwrite(STDERR, "Request to the API failed: ".$response['code'].": ".$response['response']);
+			exit(1);
+		}
+
+		return json_decode($response['response']);
+	}
+
+	private function write($json, $endpoint)
+	{
 		$log = new \Monolog\Logger('json-parser');
 		$log->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
 		$parser = Parser::create($log);
-		$parser->process(array($json), str_replace('/', '_', $endpoint));
+		
+		if (!is_array($json))
+		{
+			$json = array($json);
+		}
+
+		$parser->process($json, str_replace('/', '_', $endpoint));
 		$result = $parser->getCsvFiles();
 
 		foreach ($result as $file)
