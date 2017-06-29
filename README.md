@@ -31,7 +31,7 @@ Set up:
     "Journals",
     {
       "Contacts": [
-        "includeArchived": "true"
+        {"includeArchived": "true"}
       ]
     }
   ]
