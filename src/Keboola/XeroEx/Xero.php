@@ -211,6 +211,12 @@ class Xero
 		$log = new \Monolog\Logger('json-parser');
 		$log->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
 		$parser = Parser::create($log);
+
+		if (empty($json))
+		{
+			echo "ERRROR: Endpoint ".$endpoint." returned empty response.\n";
+			return;
+		}
 		
 		if (!is_array($json))
 		{
