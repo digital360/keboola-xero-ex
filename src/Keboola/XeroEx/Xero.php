@@ -159,7 +159,7 @@ class Xero
 
 				$counter = 1;
 				
-				while (count($response->$endpoint) > 0 && $counter <= 20)
+				while (count($response->$endpoint) > 0 && $counter <= 10000)
 				{
 					if ($this->debug)
 					{
