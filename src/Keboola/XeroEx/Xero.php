@@ -37,6 +37,10 @@ class Xero
 
 	private $debug = false;
 
+	private $sentRequests = array();
+
+	private $requestsPerMinuteLimit = 55;
+
 	public function __construct($config, $destination)
 	{
 		date_default_timezone_set('UTC');
@@ -181,8 +185,33 @@ class Xero
 		}
 	}
 
+	private function getRequestsInLastMinute()
+	{
+		$this->sentRequests;
+
+		$lastRequests = 0;
+		$minuteAgo = time() - 60;
+
+		foreach($this->sentRequests as $req)
+		{
+			if($req >= $minuteAgo)
+			{
+				$lastRequests += 1;
+			}
+		}
+
+		return $lastRequests;
+	}
+
 	private function makeRequest($endpoint, $parameters)
 	{
+		while($this->getRequestsInLastMinute() >= $this->requestsPerMinuteLimit)
+		{
+			sleep(1);
+		}
+
+		$this->sentRequests[] = time();
+
 		$url = $this->xero->url($endpoint);
 
 		$response = $this->xero->request('GET', $url, $parameters, '', 'json');
@@ -194,6 +223,9 @@ class Xero
 			print_r($endpoint);
 			echo "\n";
 			print_r($parameters);
+			echo "\n";
+			echo "Requests in last minute: ".$this->getRequestsInLastMinute();
+			echo "\n";
 		}
 
 		if (empty($response['code']) || $response['code'] != '200')
