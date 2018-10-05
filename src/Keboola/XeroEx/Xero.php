@@ -129,7 +129,7 @@ class Xero
 			$response = $this->makeRequest($endpoint, $parameters);
 
 			// Page pagination
-			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders')))
+			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders', 'CreditNotes', 'ManualJournals')))
 			{
 				$records = $response->$endpoint;
 				$page = 2;
