@@ -121,7 +121,7 @@ class Xero
 				$endpoint = array_keys($endpoint)[0];
 			}
 
-			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders')))
+			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders', 'CreditNotes', 'ManualJournals')))
 			{
 				$parameters['page'] = 1;
 			}
