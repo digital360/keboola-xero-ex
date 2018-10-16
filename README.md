@@ -4,7 +4,7 @@ To use Xero Extractor you just need to create the component in your KBC project 
 
 Set up:
 
-1. Generate public/private key pair: https://developer.xero.com/documentation/advanced-docs/public-private-keypair/
+1. Generate public/private key pair: https://developer.xero.com/documentation/api-guides/create-publicprivate-key
 
 2. Register new Private Application: https://app.xero.com/Application/Add
 
