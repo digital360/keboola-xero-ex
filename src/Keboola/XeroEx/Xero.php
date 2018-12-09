@@ -219,10 +219,12 @@ class Xero
 		
 		if ($this->debug)
 		{
-			echo "\n";
+			echo "\nEndpoint: ";
 			print_r($endpoint);
-			echo "\n";
+			echo "\nParameters: ";
 			print_r($parameters);
+			echo "\nResponse: ";
+			print_r($response);
 			echo "\n";
 			echo "Requests in last minute: ".$this->getRequestsInLastMinute();
 			echo "\n";
