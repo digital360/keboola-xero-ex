@@ -1,9 +1,11 @@
 version: '3.5'
 services:
   extractor:
+    container_name: 'extractor'
     build:
       context: .
       dockerfile: ./Dockerfile
+      target: dev
     volumes:
       - ./app:/usr/src/app
       - ./data:/data
