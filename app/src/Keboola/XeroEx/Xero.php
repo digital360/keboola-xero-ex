@@ -1,8 +1,9 @@
 <?php
 
-use Keboola\Json\Parser;
+namespace App\Keboola\XeroEx;
 
-require_once dirname(__FILE__).'/XeroOAuth-PHP/lib/XeroOAuth.php';
+use Keboola\Json\Parser;
+use XeroOAuth;
 
 class Xero
 {

@@ -1,0 +1,13 @@
+version: '3.5'
+services:
+  extractor:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./app:/usr/src/app
+      - ./data:/data
+    environment:
+      - APP_ENV=dev
+      - KBC_COMPONENTID=engineroom.ex-generic
+      - KBC_PROJECTID=6198

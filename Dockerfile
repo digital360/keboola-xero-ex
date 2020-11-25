@@ -1,18 +1,19 @@
-FROM keboola/base-php56
+FROM php:7-cli-alpine
 
-MAINTAINER Vojtech Kurka <vokurka@keboola.com>
+# Create a group and user
+RUN addgroup -g 1000 appgroup && adduser -u 1000 appuser -G appgroup -D appuser
 
-ENV APP_VERSION 0.1.5
+# latest composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /home
+COPY ./app /usr/src/app
 
-RUN git clone https://github.com/vokurka/keboola-xero-ex ./
+WORKDIR /usr/src/app
+
+# Finish composer
 RUN composer install --no-interaction
 
-WORKDIR /home/src/Keboola/XeroEx
+#USER appuser
+ENTRYPOINT php ./run.php --data=/data
 
-RUN git clone https://github.com/XeroAPI/XeroOAuth-PHP.git
-
-WORKDIR /home
-
-ENTRYPOINT php ./src/run.php --data=/data
+#CMD [ "php", "./wait.php" ]

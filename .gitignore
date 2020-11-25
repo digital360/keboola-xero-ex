@@ -4,3 +4,6 @@ vendor
 src/Keboola/XeroEx/XeroOAuth-PHP/
 composer.lock
 src/Keboola/XeroEx/certs/*
+.idea
+data
+test_data
