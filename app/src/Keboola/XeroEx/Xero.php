@@ -2,281 +2,266 @@
 
 namespace App\Keboola\XeroEx;
 
+use App\Keboola\Authentication\OAuth20Login;
+use App\Keboola\Authentication\AuthInterface;
+use App\Keboola\Configuration\Api;
+use App\Keboola\Configuration\Extractor;
+use App\Keboola\Configuration\UserFunction;
 use Keboola\Json\Parser;
-use XeroOAuth;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+
+use function Couchbase\defaultDecoder;
 
 class Xero
 {
-	private $signatures = array(
-		'application_type' => 'Private',
-		'oauth_callback' => 'oob',
-		'user_agent' => "Keboola Connection Extractor",
+    private $destination;
 
-		'consumer_key' => NULL,
-		'shared_secret' => NULL,
+    private $config;
 
-		'rsa_private_key' => NULL,
-		'rsa_public_key' => NULL,
+    private bool $debug = false;
 
-		'core_version'=> '2.0',
-		'payroll_version'=> '1.0',
-		'file_version' => '1.0',
-	);
+    private array $sentRequests = [];
 
-	private $mandatoryConfigColumns = array(
-		'consumer_key', 
-		'#consumer_secret', 
-		'#private_key',
-		'public_key',
-		'parameters',
-		'endpoint',
-	);
+    private int $requestsPerMinuteLimit = 55;
 
-	private $destination;
+    /**
+     * @var \App\Keboola\Configuration\Api
+     */
+    private $api;
 
-	private $config;
+    /**
+     * @var AuthInterface
+     */
+    private $auth;
 
-	private $debug = false;
+    public function __construct($authorization, $configAttributes, $destination)
+    {
+        date_default_timezone_set('UTC');
+        $this->destination = $destination;
 
-	private $sentRequests = array();
+        $this->logger = new Logger('logger');
+        $this->api = new Api($this->logger, $configAttributes['api'], $configAttributes, $authorization);
 
-	private $requestsPerMinuteLimit = 55;
+        $this->auth();
 
-	public function __construct($config, $destination)
-	{
-		date_default_timezone_set('UTC');
-		$this->destination = $destination;
 
-		foreach ($this->mandatoryConfigColumns as $c)
-		{
-			if (!isset($config[$c])) 
-			{
-				throw new Exception("Mandatory column '{$c}' not found or empty.");
-			}
+        if (!empty($config["debug"])) {
+            $this->debug = true;
+        }
 
-			$this->config[$c] = $config[$c];
-		}
+        foreach (['date', 'fromDate', 'toDate'] as $date) {
+            if (!empty($this->config['parameters'][$date])) {
+                $timestamp = strtotime($this->config['parameters'][$date]);
+                $dateTime = new DateTime();
+                $dateTime->setTimestamp($timestamp);
 
-		if (!empty($config["debug"]))
-		{
-			$this->debug = true;
-		}
+                $this->config['parameters'][$date] = $dateTime->format('Y-m-d');
+            }
+        }
+    }
 
-		if (!file_exists(dirname(__FILE__)."/certs/"))
-		{
-			mkdir(dirname(__FILE__)."/certs/");
-		}
+    public function auth()
+    {
+        $a = UserFunction::build(
+            $this->api->getHeaders()->getHeaders(),
+            ['attr' => $this->api->getConfig()->getAttributes()]
+        );
 
-		if (!file_exists(dirname(__FILE__)."/certs/ca-bundle.crt"))
-		{
-			$cert = file_get_contents("http://curl.haxx.se/ca/cacert.pem");
+        dd($a);
+        dd($this->api->getBaseUrl());
+        dd($auth);
 
-			if (empty($cert)) 
-			{
-				throw new Exception("Cannot load SSL certificate for comms.");
-			}
+        $client = new GuzzleHttp\Client();
+        $res = $client->request('POST', $this->api->getBaseUrl(), [
+            'auth' => ['user', 'pass']
+        ]);
+        echo $res->getStatusCode();
+// "200"
+        echo $res->getHeader('content-type')[0];
+// 'application/json; charset=utf8'
+        echo $res->getBody();
 
-			file_put_contents(dirname(__FILE__)."/certs/ca-bundle.crt", $cert);
-		}
+        $client = new RestClient(
+            $this->logger,
+            [
+                'base_url' => $this->api->getBaseUrl(),
+                'defaults' => [
+                    'headers' => UserFunction::build(
+                        $this->api->getHeaders()->getHeaders(),
+                        ['attr' => $config->getAttributes()]
+                    ),
+                    'proxy'   => $this->proxy,
+                ]
+            ],
+            JuicerRest::convertRetry($this->api->getRetryConfig()),
+            $this->api->getDefaultRequestOptions(),
+            $this->api->getIgnoreErrors()
+        );
+    }
 
-		$this->prepareCertificates();
+    public function run()
+    {
+        $endpoints = $this->config['endpoint'];
 
-		$this->signatures['consumer_key'] = $this->config['consumer_key'];
-		$this->signatures['access_token'] = $this->config['consumer_key'];
-		$this->signatures['shared_secret'] = $this->config['#consumer_secret'];
-		$this->signatures['access_token_secret'] = $this->config['#consumer_secret'];
-		$this->signatures['rsa_private_key'] = dirname(__FILE__)."/certs/privatekey";
-		$this->signatures['rsa_public_key'] = dirname(__FILE__)."/certs/publickey";
+        if (is_string($this->config['endpoint'])) {
+            $endpoints = [$this->config['endpoint']];
+        }
 
-		$this->xero = new XeroOAuth($this->signatures);
+        foreach ($endpoints as $endpoint) {
+            $parameters = $this->config['parameters'];
 
-		foreach (array('date', 'fromDate', 'toDate') as $date)
-		{
-			if (!empty($this->config['parameters'][$date]))
-			{
-				$timestamp = strtotime($this->config['parameters'][$date]);
-				$dateTime = new DateTime();
-				$dateTime->setTimestamp($timestamp);
+            if (is_array($endpoint)) {
+                $parameters = array_merge($parameters, array_values($endpoint)[0][0]);
+                $endpoint = array_keys($endpoint)[0];
+            }
 
-				$this->config['parameters'][$date] = $dateTime->format('Y-m-d');
-			}
-		}
-	}
+            if (in_array($endpoint, [
+                'BankTransactions', 'Contacts', 'Invoices', 'Overpayments', 'Prepayments', 'PurchaseOrders',
+                'CreditNotes', 'ManualJournals'
+            ])) {
+                $parameters['page'] = 1;
+            }
 
-	public function run()
-	{
-		$endpoints = $this->config['endpoint'];
+            $response = $this->makeRequest($endpoint, $parameters);
 
-		if (is_string($this->config['endpoint']))
-		{
-			$endpoints = array($this->config['endpoint']);
-		}
+            // Page pagination
+            if (in_array($endpoint, [
+                'BankTransactions', 'Contacts', 'Invoices', 'Overpayments', 'Prepayments', 'PurchaseOrders',
+                'CreditNotes', 'ManualJournals'
+            ])) {
+                $records = $response->$endpoint;
+                $page = 2;
 
-		foreach ($endpoints as $endpoint)
-		{
-			$parameters = $this->config['parameters'];
+                while (count($response->$endpoint) > 0 && $page <= 1000) {
+                    if ($this->debug) {
+                        echo "\n";
+                        print_r(count($response->$endpoint));
+                    }
 
-			if (is_array($endpoint))
-			{
-				$parameters = array_merge($parameters, array_values($endpoint)[0][0]);
-				$endpoint = array_keys($endpoint)[0];
-			}
+                    $currentParameters = $parameters;
+                    $currentParameters['page'] = $page;
+                    $response = $this->makeRequest($endpoint, $currentParameters);
 
-			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders', 'CreditNotes', 'ManualJournals')))
-			{
-				$parameters['page'] = 1;
-			}
+                    $page += 1;
+                    $records = array_merge($records, $response->$endpoint);
+                }
 
-			$response = $this->makeRequest($endpoint, $parameters);
+                $response = $records;
+            }
 
-			// Page pagination
-			if (in_array($endpoint, array('BankTransactions','Contacts','Invoices','Overpayments','Prepayments','PurchaseOrders', 'CreditNotes', 'ManualJournals')))
-			{
-				$records = $response->$endpoint;
-				$page = 2;
-				
-				while (count($response->$endpoint) > 0 && $page <= 1000)
-				{
-					if ($this->debug)
-					{
-						echo "\n";
-						print_r(count($response->$endpoint));
-					}
+            // Offset paignation
+            if (in_array($endpoint, ['Journals'])) {
+                $offsetNames = [
+                    'Journals' => 'JournalNumber'
+                ];
+                $records = $response->$endpoint;
 
-					$currentParameters = $parameters;
-					$currentParameters['page'] = $page;
-					$response = $this->makeRequest($endpoint, $currentParameters);
+                $counter = 1;
 
-					$page += 1;
-					$records = array_merge($records, $response->$endpoint);
-				}
+                while (count($response->$endpoint) > 0 && $counter <= 10000) {
+                    if ($this->debug) {
+                        print_r(count($response->$endpoint));
+                    }
 
-				$response = $records;
-			}
+                    $currentParameters = $parameters;
+                    $currentParameters['offset'] = $records[count($records) - 1]->$offsetNames[$endpoint];
+                    $response = $this->makeRequest($endpoint, $currentParameters);
 
-			// Offset paignation
-			if (in_array($endpoint, array('Journals')))
-			{
-				$offsetNames = array(
-					'Journals' => 'JournalNumber'
-				);
-				$records = $response->$endpoint;
+                    $counter += 1;
+                    $records = array_merge($records, $response->$endpoint);
+                }
 
-				$counter = 1;
-				
-				while (count($response->$endpoint) > 0 && $counter <= 10000)
-				{
-					if ($this->debug)
-					{
-						print_r(count($response->$endpoint));
-					}
+                $response = $records;
+            }
 
-					$currentParameters = $parameters;
-					$currentParameters['offset'] = $records[count($records)-1]->$offsetNames[$endpoint];
-					$response = $this->makeRequest($endpoint, $currentParameters);
+            $this->write($response, $endpoint);
+        }
+    }
 
-					$counter += 1;
-					$records = array_merge($records, $response->$endpoint);
-				}
+    private function makeRequest($endpoint, $parameters)
+    {
+        while ($this->getRequestsInLastMinute() >= $this->requestsPerMinuteLimit) {
+            sleep(1);
+        }
 
-				$response = $records;
-			}			
+        $this->sentRequests[] = time();
 
-			$this->write($response, $endpoint);
-		}
-	}
+        $url = $this->xero->url($endpoint);
 
-	private function getRequestsInLastMinute()
-	{
-		$this->sentRequests;
+        $response = $this->xero->request('GET', $url, $parameters, '', 'json');
 
-		$lastRequests = 0;
-		$minuteAgo = time() - 60;
 
-		foreach($this->sentRequests as $req)
-		{
-			if($req >= $minuteAgo)
-			{
-				$lastRequests += 1;
-			}
-		}
+        if ($this->debug) {
+            echo "\nEndpoint: ";
+            print_r($endpoint);
+            echo "\nParameters: ";
+            print_r($parameters);
+            echo "\nResponse: ";
+            print_r($response);
+            echo "\n";
+            echo "Requests in last minute: ".$this->getRequestsInLastMinute();
+            echo "\n";
+        }
 
-		return $lastRequests;
-	}
+        if (empty($response['code']) || $response['code'] != '200') {
+            if (empty($response['code'])) {
+                $response['code'] = 'N/A';
+                $response['response'] = 'N/A';
+            }
+            fwrite(STDERR, "Request to the API failed: ".$response['code'].": ".$response['response']);
+            exit(1);
+        }
 
-	private function makeRequest($endpoint, $parameters)
-	{
-		while($this->getRequestsInLastMinute() >= $this->requestsPerMinuteLimit)
-		{
-			sleep(1);
-		}
+        return json_decode($response['response']);
+    }
 
-		$this->sentRequests[] = time();
+    private function getRequestsInLastMinute()
+    {
+        $this->sentRequests;
 
-		$url = $this->xero->url($endpoint);
+        $lastRequests = 0;
+        $minuteAgo = time() - 60;
 
-		$response = $this->xero->request('GET', $url, $parameters, '', 'json');
+        foreach ($this->sentRequests as $req) {
+            if ($req >= $minuteAgo) {
+                $lastRequests += 1;
+            }
+        }
 
-		
-		if ($this->debug)
-		{
-			echo "\nEndpoint: ";
-			print_r($endpoint);
-			echo "\nParameters: ";
-			print_r($parameters);
-			echo "\nResponse: ";
-			print_r($response);
-			echo "\n";
-			echo "Requests in last minute: ".$this->getRequestsInLastMinute();
-			echo "\n";
-		}
+        return $lastRequests;
+    }
 
-		if (empty($response['code']) || $response['code'] != '200')
-		{
-			if (empty($response['code']))
-			{
-				$response['code'] = 'N/A';
-				$response['response'] = 'N/A';
-			}
-			fwrite(STDERR, "Request to the API failed: ".$response['code'].": ".$response['response']);
-			exit(1);
-		}
+    private function write($json, $endpoint)
+    {
+        $log = new Logger('json-parser');
+        $log->pushHandler(new StreamHandler('php://stdout'));
+        $parser = Parser::create($log);
 
-		return json_decode($response['response']);
-	}
+        if (empty($json)) {
+            echo "ERRROR: Endpoint ".$endpoint." returned empty response.\n";
 
-	private function write($json, $endpoint)
-	{
-		$log = new \Monolog\Logger('json-parser');
-		$log->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
-		$parser = Parser::create($log);
+            return;
+        }
 
-		if (empty($json))
-		{
-			echo "ERRROR: Endpoint ".$endpoint." returned empty response.\n";
-			return;
-		}
-		
-		if (!is_array($json))
-		{
-			$json = array($json);
-		}
+        if (!is_array($json)) {
+            $json = [$json];
+        }
 
-		$parser->process($json, str_replace('/', '_', $endpoint));
-		$result = $parser->getCsvFiles();
+        $parser->process($json, str_replace('/', '_', $endpoint));
+        $result = $parser->getCsvFiles();
 
-		foreach ($result as $file)
-		{
-			copy($file->getPathName(), $this->destination.substr($file->getFileName(), strpos($file->getFileName(), '-')+1));
-		}
-	}
+        foreach ($result as $file) {
+            copy($file->getPathName(),
+                $this->destination.substr($file->getFileName(), strpos($file->getFileName(), '-') + 1));
+        }
+    }
 
-	private function prepareCertificates()
-	{
-		foreach (array('#private_key' => 'privatekey', 'public_key' => 'publickey') as $configName => $fileName)
-		{
-			$cert = str_replace("\\n", "\n", $this->config[$configName]);
-			file_put_contents(dirname(__FILE__)."/certs/".$fileName, $cert);
-		}	
-	}
+    private function prepareCertificates()
+    {
+        foreach (['#private_key' => 'privatekey', 'public_key' => 'publickey'] as $configName => $fileName) {
+            $cert = str_replace("\\n", "\n", $this->config[$configName]);
+            file_put_contents(dirname(__FILE__)."/certs/".$fileName, $cert);
+        }
+    }
 }

@@ -1,23 +1,20 @@
 <?php
 
-use App\Keboola\XeroEx\Xero;
-use Symfony\Component\Yaml\Yaml;
-
-system('ls -al');
-
 require __DIR__.'/vendor/autoload.php';
 
+use App\Keboola\XeroEx\Xero;
 
-$arguments = getopt("d::", array ("data::"));
+$arguments = getopt("d::", ["data::"]);
 if (!isset($arguments["data"])) {
     print "Data folder not set.";
     exit(1);
 }
 
-$config = Yaml::parse(file_get_contents($arguments["data"]."/config.yml"));
+$config = json_decode(file_get_contents($arguments["data"]."/config.json"), true);
 
 try {
     $xero = new Xero(
+        $config['authorization'],
         $config['parameters'],
         $arguments["data"]."/out/tables/"
     );
